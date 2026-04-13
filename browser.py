@@ -1,5 +1,5 @@
 import logging
-from aiohttp import ClientSession
+from aiohttp import ClientError, ClientSession, ClientTimeout
 from typing import AsyncIterator, Any, List, Union
 import time,json,html
 import asyncio
@@ -99,15 +99,55 @@ class LocalServiceBrowserBackend:
     
     def __init__(self,base_url):
         self.base_url = base_url
+        self.max_retries = int(os.getenv("LOCAL_SEARCH_MAX_RETRIES", "3"))
+        self.request_timeout_s = float(os.getenv("LOCAL_SEARCH_TIMEOUT_S", "30"))
         
     async def _post(self, session: ClientSession, endpoint: str, payload: dict) -> dict:
-        t0 = time.time()
-        async with session.post(f"{self.base_url}{endpoint}", json=payload) as resp:
-            if resp.status != 200:
-                raise BackendError(
-                    f"Search error {resp.status}: {await resp.text()}"
+        last_error = None
+
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                timeout = ClientTimeout(total=self.request_timeout_s)
+                async with session.post(
+                    f"{self.base_url}{endpoint}",
+                    json=payload,
+                    timeout=timeout,
+                ) as resp:
+                    if resp.status == 200:
+                        return await resp.json()
+
+                    error_text = await resp.text()
+                    if 500 <= resp.status < 600:
+                        last_error = BackendError(
+                            f"Search error {resp.status}: {error_text}"
+                        )
+                        logger.warning(
+                            "Local search backend %s failed with %s on attempt %s/%s",
+                            endpoint,
+                            resp.status,
+                            attempt,
+                            self.max_retries,
+                        )
+                        continue
+
+                    raise BackendError(f"Search error {resp.status}: {error_text}")
+
+            except (asyncio.TimeoutError, ClientError) as exc:
+                last_error = BackendError(
+                    f"Search request failed for {endpoint}: {exc}"
                 )
-            return await resp.json()
+                logger.warning(
+                    "Local search backend %s request failed on attempt %s/%s: %s",
+                    endpoint,
+                    attempt,
+                    self.max_retries,
+                    exc,
+                )
+
+        if last_error is not None:
+            raise last_error
+
+        raise BackendError(f"Search request failed for {endpoint} without a captured error")
                 
     async def _search_single(
         self,
