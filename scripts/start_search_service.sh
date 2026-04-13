@@ -30,22 +30,33 @@ echo ""
 # Get script directory and project root
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+MAIN_REPO_ROOT="$(dirname "$(dirname "$PROJECT_ROOT")")"
+EVAL_ENV_DIR="${MAIN_REPO_ROOT}/.eval"
+LOCAL_ENV_DIR="${PROJECT_ROOT}/.venv"
 cd "$PROJECT_ROOT"
 
-# Check if virtual environment exists
-if [ ! -d ".venv" ]; then
-    echo -e "${RED}Error: Virtual environment not found. Please run ./setup.sh first${NC}"
+# Resolve Python environment
+if [ -f "${EVAL_ENV_DIR}/bin/activate" ]; then
+    ENV_DIR="${EVAL_ENV_DIR}"
+elif [ -f "${LOCAL_ENV_DIR}/bin/activate" ]; then
+    ENV_DIR="${LOCAL_ENV_DIR}"
+else
+    echo -e "${RED}Error: No evaluation environment found.${NC}"
+    echo "Expected either ${EVAL_ENV_DIR} or ${LOCAL_ENV_DIR}"
+    echo "Run ${MAIN_REPO_ROOT}/install_scripts/setup_eval_env.sh or ${PROJECT_ROOT}/setup.sh"
     exit 1
 fi
 
 # Activate virtual environment
 echo -e "${YELLOW}Activating virtual environment...${NC}"
-source .venv/bin/activate
+source "${ENV_DIR}/bin/activate"
+UVICORN_BIN="${ENV_DIR}/bin/uvicorn"
 
 # Verify we're using the right Python
 PYTHON_VERSION=$(python --version)
 echo "Using: $PYTHON_VERSION"
 echo "Python path: $(which python)"
+echo "Environment: ${ENV_DIR}"
 echo ""
 
 # Set common environment variables
@@ -112,4 +123,4 @@ echo "Press Ctrl+C to stop"
 echo ""
 
 # Start uvicorn
-uvicorn scripts.deploy_search_service:app --host 0.0.0.0 --port ${PORT}
+"${UVICORN_BIN}" scripts.deploy_search_service:app --host 0.0.0.0 --port ${PORT}

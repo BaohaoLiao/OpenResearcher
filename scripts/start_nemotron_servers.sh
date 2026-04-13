@@ -11,7 +11,24 @@ MODEL=${4:-"OpenResearcher/OpenResearcher-30B-A3B"}
 # Get script directory and project root
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+MAIN_REPO_ROOT="$(dirname "$(dirname "$PROJECT_ROOT")")"
+EVAL_ENV_DIR="${MAIN_REPO_ROOT}/.eval"
+LOCAL_ENV_DIR="${PROJECT_ROOT}/.venv"
 cd "$PROJECT_ROOT"
+
+if [ -f "${EVAL_ENV_DIR}/bin/activate" ]; then
+    ENV_DIR="${EVAL_ENV_DIR}"
+elif [ -f "${LOCAL_ENV_DIR}/bin/activate" ]; then
+    ENV_DIR="${LOCAL_ENV_DIR}"
+else
+    echo "Error: No evaluation environment found." >&2
+    echo "Run ${MAIN_REPO_ROOT}/install_scripts/setup_eval_env.sh or ${PROJECT_ROOT}/setup.sh" >&2
+    exit 1
+fi
+
+# shellcheck disable=SC1090
+source "${ENV_DIR}/bin/activate"
+PYTHON_BIN="${ENV_DIR}/bin/python"
 
 # Detect available GPUs
 if [ -n "$CUDA_VISIBLE_DEVICES" ]; then
@@ -70,7 +87,7 @@ for i in $(seq 0 $((NUM_SERVERS-1))); do
     echo "  - Port: $PORT"
     echo "  - Log: $LOG_FILE"
 
-    CUDA_VISIBLE_DEVICES=$SERVER_GPUS python scripts/deploy_vllm_service.py \
+    CUDA_VISIBLE_DEVICES=$SERVER_GPUS "${PYTHON_BIN}" scripts/deploy_vllm_service.py \
         --model $MODEL \
         --port $PORT \
         --tensor_parallel_size $TP_SIZE \

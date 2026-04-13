@@ -2,10 +2,10 @@
 # Quick start script for running agent with multiple vLLM servers
 # Usage: ./run_agent.sh [output_dir] [base_port] [num_servers] [dataset_name] [browser_backend] [model_path]
 
-OUTPUT_DIR=${1:-"results/browsecomp-plus/OpenResearcher_dense"}
+OUTPUT_DIR=${1:-"results/browsecomp_plus/OpenResearcher_dense"}
 BASE_PORT=${2:-8001}
 NUM_SERVERS=${3:-2}
-DATASET_NAME=${4:-"browsecomp-plus"}
+DATASET_NAME=${4:-"browsecomp_plus"}
 BROWSER_BACKEND=${5:-"local"}
 MODEL=${6:-"OpenResearcher/OpenResearcher-30B-A3B"}
 
@@ -14,7 +14,24 @@ SEARCH_URL="http://localhost:8000"
 
 # Get script directory (project root)
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+MAIN_REPO_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+EVAL_ENV_DIR="${MAIN_REPO_ROOT}/.eval"
+LOCAL_ENV_DIR="${SCRIPT_DIR}/.venv"
 cd "$SCRIPT_DIR"
+
+if [ -f "${EVAL_ENV_DIR}/bin/activate" ]; then
+    ENV_DIR="${EVAL_ENV_DIR}"
+elif [ -f "${LOCAL_ENV_DIR}/bin/activate" ]; then
+    ENV_DIR="${LOCAL_ENV_DIR}"
+else
+    echo "Error: No evaluation environment found." >&2
+    echo "Run ${MAIN_REPO_ROOT}/install_scripts/setup_eval_env.sh or ${SCRIPT_DIR}/setup.sh" >&2
+    exit 1
+fi
+
+# shellcheck disable=SC1090
+source "${ENV_DIR}/bin/activate"
+PYTHON_BIN="${ENV_DIR}/bin/python"
 
 # Build comma-separated server URLs
 SERVER_URLS=""
@@ -52,7 +69,7 @@ if [ "$DATASET_NAME" = "browsecomp_plus" ]; then
     echo "Using local BrowseComp-Plus dataset: $DATA_PATH"
     echo ""
 
-    python deploy_agent.py \
+    "${PYTHON_BIN}" deploy_agent.py \
         --output_dir "$OUTPUT_DIR" \
         --model_name_or_path "$MODEL" \
         --search_url "$SEARCH_URL" \
@@ -68,7 +85,7 @@ else
     echo "Available datasets: browsecomp, gaia, xbench"
     echo ""
 
-    python deploy_agent.py \
+    "${PYTHON_BIN}" deploy_agent.py \
         --output_dir "$OUTPUT_DIR" \
         --model_name_or_path "$MODEL" \
         --search_url "$SEARCH_URL" \

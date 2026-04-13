@@ -12,6 +12,27 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+download_file() {
+    local url="$1"
+    local output_path="$2"
+
+    if command -v wget >/dev/null 2>&1; then
+        wget -q -O "$output_path" "$url"
+    elif command -v curl >/dev/null 2>&1; then
+        curl -LsSf "$url" -o "$output_path"
+    else
+        echo -e "${RED}Error: Neither wget nor curl is available for downloading ${url}${NC}"
+        exit 1
+    fi
+}
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$SCRIPT_DIR"
+MAIN_REPO_ROOT="$(dirname "$(dirname "$PROJECT_ROOT")")"
+EVAL_ENV_DIR="${MAIN_REPO_ROOT}/.eval"
+LOCAL_ENV_DIR="${PROJECT_ROOT}/.venv"
+ENV_DIR=""
+
 # Check if uv is installed
 echo -e "\n${YELLOW}[1/6] Checking uv installation...${NC}"
 if ! command -v uv &> /dev/null; then
@@ -23,16 +44,22 @@ echo -e "${GREEN}✓ uv is installed${NC}"
 
 # Create virtual environment with Python 3.12
 echo -e "\n${YELLOW}[2/6] Creating Python 3.12 virtual environment...${NC}"
-if [ -d ".venv" ]; then
-    echo -e "${YELLOW}Virtual environment already exists. Skipping creation.${NC}"
+if [ -f "${EVAL_ENV_DIR}/bin/activate" ]; then
+    ENV_DIR="${EVAL_ENV_DIR}"
+    echo -e "${YELLOW}Using AOPDE evaluation environment at ${ENV_DIR}.${NC}"
+elif [ -d "${LOCAL_ENV_DIR}" ]; then
+    ENV_DIR="${LOCAL_ENV_DIR}"
+    echo -e "${YELLOW}Virtual environment already exists at ${ENV_DIR}. Skipping creation.${NC}"
 else
-    uv venv --python 3.12
+    uv venv --python 3.12 "${LOCAL_ENV_DIR}"
+    ENV_DIR="${LOCAL_ENV_DIR}"
     echo -e "${GREEN}✓ Virtual environment created${NC}"
 fi
 
 # Activate virtual environment
 echo -e "\n${YELLOW}[3/6] Installing Python packages...${NC}"
-source .venv/bin/activate
+# shellcheck disable=SC1090
+source "${ENV_DIR}/bin/activate"
 
 # Install Python dependencies
 uv pip install -e .
@@ -74,16 +101,17 @@ else
     echo -e "${YELLOW}Downloading Lucene highlighter JARs to tevatron/...${NC}"
     cd tevatron
     LUCENE_VERSION="9.9.1"
-    wget -q "https://repo1.maven.org/maven2/org/apache/lucene/lucene-highlighter/${LUCENE_VERSION}/lucene-highlighter-${LUCENE_VERSION}.jar"
-    wget -q "https://repo1.maven.org/maven2/org/apache/lucene/lucene-queries/${LUCENE_VERSION}/lucene-queries-${LUCENE_VERSION}.jar"
-    wget -q "https://repo1.maven.org/maven2/org/apache/lucene/lucene-memory/${LUCENE_VERSION}/lucene-memory-${LUCENE_VERSION}.jar"
+    download_file "https://repo1.maven.org/maven2/org/apache/lucene/lucene-highlighter/${LUCENE_VERSION}/lucene-highlighter-${LUCENE_VERSION}.jar" "lucene-highlighter-${LUCENE_VERSION}.jar"
+    download_file "https://repo1.maven.org/maven2/org/apache/lucene/lucene-queries/${LUCENE_VERSION}/lucene-queries-${LUCENE_VERSION}.jar" "lucene-queries-${LUCENE_VERSION}.jar"
+    download_file "https://repo1.maven.org/maven2/org/apache/lucene/lucene-memory/${LUCENE_VERSION}/lucene-memory-${LUCENE_VERSION}.jar" "lucene-memory-${LUCENE_VERSION}.jar"
     cd ..
     echo -e "${GREEN}✓ Lucene JARs downloaded${NC}"
 fi
 
 # Check huggingface-cli installation
 echo -e "\n${YELLOW}[7/9] Checking huggingface-cli installation...${NC}"
-if ! command -v huggingface-cli &> /dev/null; then
+HF_CLI="${ENV_DIR}/bin/huggingface-cli"
+if [ ! -x "${HF_CLI}" ]; then
     echo -e "${YELLOW}huggingface-cli not found. Installing...${NC}"
     uv pip install huggingface_hub[cli]
     echo -e "${GREEN}✓ huggingface-cli installed${NC}"
@@ -98,7 +126,7 @@ if [ -d "Tevatron/browsecomp-plus" ]; then
 else
     mkdir -p Tevatron
     echo -e "${YELLOW}Downloading Tevatron/browsecomp-plus (test queries and answers)...${NC}"
-    huggingface-cli download Tevatron/browsecomp-plus --repo-type=dataset --local-dir ./Tevatron/browsecomp-plus
+    "${HF_CLI}" download Tevatron/browsecomp-plus --repo-type=dataset --local-dir ./Tevatron/browsecomp-plus
     echo -e "${GREEN}✓ Test dataset downloaded${NC}"
 fi
 
@@ -109,7 +137,7 @@ if [ -d "Tevatron/browsecomp-plus-corpus" ]; then
 else
     mkdir -p Tevatron
     echo -e "${YELLOW}Downloading Tevatron/browsecomp-plus-corpus...${NC}"
-    huggingface-cli download Tevatron/browsecomp-plus-corpus --repo-type=dataset --local-dir ./Tevatron/browsecomp-plus-corpus
+    "${HF_CLI}" download Tevatron/browsecomp-plus-corpus --repo-type=dataset --local-dir ./Tevatron/browsecomp-plus-corpus
     echo -e "${GREEN}✓ Corpus downloaded${NC}"
 fi
 
@@ -120,7 +148,7 @@ if [ -d "Tevatron/browsecomp-plus-indexes/bm25" ]; then
 else
     mkdir -p Tevatron/browsecomp-plus-indexes
     echo -e "${YELLOW}Downloading BM25 index (~2.1GB)...${NC}"
-    huggingface-cli download Tevatron/browsecomp-plus-indexes --repo-type=dataset --include="bm25/*" --local-dir ./Tevatron/browsecomp-plus-indexes
+    "${HF_CLI}" download Tevatron/browsecomp-plus-indexes --repo-type=dataset --include="bm25/*" --local-dir ./Tevatron/browsecomp-plus-indexes
     echo -e "${GREEN}✓ BM25 index downloaded${NC}"
 fi
 
@@ -131,6 +159,6 @@ if [ -d "Tevatron/browsecomp-plus-indexes/qwen3-embedding-8b" ]; then
 else
     mkdir -p Tevatron/browsecomp-plus-indexes
     echo -e "${YELLOW}Downloading Qwen3-Embedding-8B index (~1.6GB, this may take a while)...${NC}"
-    huggingface-cli download Tevatron/browsecomp-plus-indexes --repo-type=dataset --include="qwen3-embedding-8b/*" --local-dir ./Tevatron/browsecomp-plus-indexes
+    "${HF_CLI}" download Tevatron/browsecomp-plus-indexes --repo-type=dataset --include="qwen3-embedding-8b/*" --local-dir ./Tevatron/browsecomp-plus-indexes
     echo -e "${GREEN}✓ Qwen3-Embedding-8B index downloaded${NC}"
 fi
