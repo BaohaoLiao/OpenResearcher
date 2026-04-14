@@ -8,6 +8,7 @@ NUM_SERVERS=${3:-2}
 DATASET_NAME=${4:-"browsecomp_plus"}
 BROWSER_BACKEND=${5:-"local"}
 MODEL=${6:-"OpenResearcher/OpenResearcher-30B-A3B"}
+MAX_ROUNDS=${MAX_ROUNDS:-200}
 
 
 SEARCH_URL="http://localhost:8000"
@@ -60,6 +61,7 @@ echo "Search Service: $SEARCH_URL"
 echo "Dataset: $DATASET_NAME"
 echo "Browser Backend: $BROWSER_BACKEND"
 echo "Output Directory: $OUTPUT_DIR"
+echo "Max Rounds: $MAX_ROUNDS"
 echo "=========================================="
 echo ""
 
@@ -78,6 +80,7 @@ if [ "$DATASET_NAME" = "browsecomp_plus" ]; then
         --browser_backend "$BROWSER_BACKEND" \
         --reasoning_effort high \
         --vllm_server_url "$SERVER_URLS" \
+        --max_rounds "$MAX_ROUNDS" \
         --max_concurrency_per_worker 32
 else
     # HuggingFace datasets or OpenAI BrowseComp (no local data_path needed)
@@ -93,5 +96,6 @@ else
         --browser_backend "$BROWSER_BACKEND" \
         --reasoning_effort high \
         --vllm_server_url "$SERVER_URLS" \
+        --max_rounds "$MAX_ROUNDS" \
         --max_concurrency_per_worker 32
 fi

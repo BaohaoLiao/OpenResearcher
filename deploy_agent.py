@@ -529,7 +529,7 @@ def worker_entry(
                                 qid=qid,
                                 generator=generator,
                                 browser_pool=browser_pool,
-                                max_rounds=200
+                                max_rounds=args.max_rounds
                             )
                             dt = time.time() - t0
                             rec = item_data.copy()
@@ -566,6 +566,8 @@ def main():
     parser.add_argument("--browser_backend", type=str, default="local", choices=["local", "serper"],
                         help="Browser backend: 'local' (default) or 'serper'")
     parser.add_argument("--max_concurrency_per_worker", type=int, default=8)
+    parser.add_argument("--max_rounds", type=int, default=200,
+                        help="Maximum agent rounds per task before returning (default: 200)")
     parser.add_argument("--reasoning_effort", default='high')
     parser.add_argument("--tensor_parallel_size", type=int, default=1,
                         help="Tensor parallel size for local vLLM (default: 1, ignored if using --vllm_server_url)")
